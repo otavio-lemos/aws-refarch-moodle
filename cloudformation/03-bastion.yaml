@@ -1,27 +1,27 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
 
-Description: Reference Architecture to host Moodle on AWS - Creates ElastiCache cache cluster
+Description: Reference Architecture to host Moodle on AWS - Creates bastion (desired:0; min:0; max:1) Auto Scaling group
 
 Metadata:
 
   AWS::CloudFormation::Interface:
     ParameterGroups:
     - Label:
-        default: Cache Parameters
+        default: AWS Parameters
       Parameters:
-        - ElastiCacheNodeType
-        - ElastiCacheClusterName
-        - ElastiCacheSecurityGroup
+        - EC2KeyName
+        - BastionInstanceType
+        - BastionSecurityGroup
         - NumberOfSubnets
         - Subnet
     ParameterLabels:
-      ElastiCacheClusterName:
-        default: Cache Cluster Name
-      ElastiCacheNodeType:
-        default: Cache Cluster Node Type
-      ElastiCacheSecurityGroup:
-        default: ElastiCache Security Group
+      BastionSecurityGroup:
+        default: Bastion Security Group
+      BastionInstanceType:
+        default: Instance Type
+      EC2KeyName:
+        default: Existing Key Pair
       NumberOfSubnets:
         default: Number of subnets
       Subnet:
@@ -29,42 +29,19 @@ Metadata:
 
 Parameters:
 
-  ElastiCacheClusterName:
-    AllowedPattern: ^([a-zA-Z0-9]*)$
-    Description: The ElastiCache cluster name. Defaults to the Amazon RDS database name.
-    Type: String
-  ElastiCacheNodeType:
-    AllowedValues:
-      - cache.t2.micro
-      - cache.t2.small
-      - cache.t2.medium
-      - cache.m3.medium
-      - cache.m3.large
-      - cache.m3.xlarge
-      - cache.m3.2xlarge
-      - cache.m4.large
-      - cache.m4.xlarge
-      - cache.m4.2xlarge
-      - cache.m4.4xlarge
-      - cache.m4.10xlarge
-      - cache.r3.large
-      - cache.r3.xlarge
-      - cache.r3.2xlarge
-      - cache.r3.4xlarge
-      - cache.r3.8xlarge
-      - cache.r4.large
-      - cache.r4.xlarge
-      - cache.r4.2xlarge
-      - cache.r4.4xlarge
-      - cache.r4.8xlarge
-      - cache.r4.16xlarge
-    ConstraintDescription: Must be a valid Amazon ElastiCache node type.
-    Default: cache.t2.medium
-    Description: The Amazon ElastiCache cluster node type.
-    Type: String
-  ElastiCacheSecurityGroup:
-    Description: Select the ElastiCache security group.
+  BastionSecurityGroup:
+    Description: Select the bastion security group.
     Type: AWS::EC2::SecurityGroup::Id
+  BastionInstanceType:
+    AllowedValues:
+    - t3.nano
+    ConstraintDescription: Must be a valid Amazon EC2 instance type.
+    Default: t3.nano
+    Description: Bastion EC2 instance type.
+    Type: String
+  EC2KeyName:
+    Description: Name of an EC2 KeyPair. Your bastion instances will launch with this KeyPair.
+    Type: AWS::EC2::KeyPair::KeyName
   NumberOfSubnets:
     AllowedValues:
     - 2
@@ -74,10 +51,14 @@ Parameters:
     - 6
     Default: 3
     Description: Number of subnets. This must match your selections in the list of subnets below.
-    Type: String 
+    Type: String
   Subnet:
     Description: Select existing subnets. The number selected must match the number of subnets above. Subnets selected must be in separate AZs.
     Type: List<AWS::EC2::Subnet::Id>
+  LatestAmiId :
+    Type : AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
 
 Conditions:
 
@@ -120,29 +101,23 @@ Conditions:
     - !Condition NumberOfSubnets6
   Subnet5: !Condition NumberOfSubnets6
 
+
 Resources:
 
-  ElastiCacheCluster:
-    Type: AWS::ElastiCache::CacheCluster
+  BastionAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      AZMode: cross-az
-      CacheNodeType: !Ref ElastiCacheNodeType
-      CacheSubnetGroupName: !Ref ElastiCacheSubnetGroup
-      ClusterName: !Ref ElastiCacheClusterName
-      Engine: memcached
-      NumCacheNodes:
-        !Ref NumberOfSubnets
+      Cooldown: 60
+      HealthCheckGracePeriod: 120
+      HealthCheckType: EC2
+      LaunchConfigurationName: !Ref BastionLaunchConfiguration
+      MaxSize: 1
+      MinSize: 1
       Tags:
         - Key: Name
-          Value: !Join [ '', [ 'Moodle / ', !Ref 'AWS::StackName' ] ]
-      VpcSecurityGroupIds:
-      - !Ref ElastiCacheSecurityGroup       
-  ElastiCacheSubnetGroup: 
-    Type: AWS::ElastiCache::SubnetGroup
-    Properties: 
-      CacheSubnetGroupName: !Join [ '', [ !Ref ElastiCacheClusterName, SubnetGroup ] ]
-      Description: ElastiCache Subnet Group for Moodle
-      SubnetIds: 
+          Value: !Join [ '', [ 'Bastion / ', !Ref 'AWS::StackName' ] ]
+          PropagateAtLaunch: true
+      VPCZoneIdentifier:
         !If
           [ NumberOfSubnets1,
           [ !Select [ 0, !Ref Subnet ] ],
@@ -164,6 +139,45 @@ Resources:
               ]
             ]
           ]
-Outputs:
-  ElastiCacheClusterEndpointAddress:
-    Value: !GetAtt ElastiCacheCluster.ConfigurationEndpoint.Address
+  BastionLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      IamInstanceProfile: !Ref BastionInstanceProfile
+      ImageId: !Ref LatestAmiId
+      InstanceMonitoring: true
+      InstanceType: !Ref BastionInstanceType
+      KeyName: !Ref EC2KeyName
+      SecurityGroups:
+        - !Ref BastionSecurityGroup
+  BastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: '/'
+      Roles:
+      - !Ref BastionInstanceRole
+  BastionInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: '/'
+      Policies:
+      - PolicyName: logs
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - logs:DescribeLogStreams
+            Resource:
+            - arn:aws:logs:*:*:*

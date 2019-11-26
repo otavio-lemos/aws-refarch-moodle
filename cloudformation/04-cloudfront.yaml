@@ -42,7 +42,7 @@ Conditions:
   NoSslCertificate:
     !Equals [ '', !Ref CloudFrontAcmCertificate ]
   DomainName:
-    !Not [ !Equals [ '', !Ref DomainName ] ]  
+    !Not [ !Equals [ '', !Ref DomainName ] ]
   NoDomainName:
     !Equals [ '', !Ref DomainName ]
 
@@ -83,7 +83,7 @@ Resources:
           Id: elb
           CustomOriginConfig:
             OriginProtocolPolicy: http-only
-        PriceClass: PriceClass_100
+        PriceClass: PriceClass_All
   CloudFrontDistributionSslCertificate:
     Type: AWS::CloudFront::Distribution
     Condition: SslCertificate
@@ -119,7 +119,7 @@ Resources:
           Id: elb
           CustomOriginConfig:
             OriginProtocolPolicy: https-only
-        PriceClass: PriceClass_100
+        PriceClass: PriceClass_All
         ViewerCertificate:
           AcmCertificateArn: !Ref CloudFrontAcmCertificate
           SslSupportMethod: sni-only
