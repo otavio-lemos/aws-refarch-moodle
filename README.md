@@ -5,7 +5,7 @@
 Diferenças para o https://github.com/aws-samples/aws-refarch-moodle
 - EC2 com t3 e m5;
 - Aurora com db.t3.medium;
-- ElastiCache com t2 (não existe t3 até a data dessa publicação);
+- ElastiCache com t2 e t3;
 - AMI Amazon Linux 2 para EC2;
 - Repositorio Amazon Extras com php7.3;
 - Moodle 3.7.2 (última versão até a data dessa publicação);
