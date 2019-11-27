@@ -296,6 +296,9 @@ Parameters:
       - cache.t2.micro
       - cache.t2.medium
       - cache.t2.small
+      - cache.t3.micro
+      - cache.t3.small
+      - cache.t3.medium
       - cache.m5.large
       - cache.m5.xlarge
       - cache.m5.2xlarge
@@ -318,6 +321,9 @@ Parameters:
       - cache.t2.micro
       - cache.t2.medium
       - cache.t2.small
+      - cache.t3.micro
+      - cache.t3.small
+      - cache.t3.medium
       - cache.m5.large
       - cache.m5.xlarge
       - cache.m5.2xlarge
